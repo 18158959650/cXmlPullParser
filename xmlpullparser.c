@@ -10,8 +10,8 @@ int parse_cdata(XmlParser *parser);
 int parse_starttag(XmlParser *parser);
 int parse_endtag(XmlParser *parser);
 int parse_text(XmlParser *parser);
-int parse_attribute(XmlParser *parser);
-void add_attr_value_list(XmlParser *parser, char *name, char *value);
+int parse_attribute(XmlParser *parser, char *p_text_start);
+bool add_attr_value_list(XmlParser *parser, char *name, char *value);
 int check_end(XmlParser *parser);
 
 XmlParser *newXmlParser(char *read_buffer)
@@ -91,12 +91,12 @@ int getNext(XmlParser *parser)
     {
         p = skip_white_space(p);
     }
-    
+
     if (*p == 0)
     {
         return check_end(parser);
-    }    
-    
+    }
+
     if (*p == '<')
     {
         if (*++p == '!')
@@ -277,18 +277,20 @@ int parse_starttag(XmlParser *parser)
             // 解析属性
             p = skip_space(p + 1);
             if (isValidAttrStartChar(*p))
-                return parse_attribute(parser);
+            {
+                parser->workp = p;
+                return parse_attribute(parser, name_begin - 1);
+            }
             else break;
-            // 解析属性
         }
         else if (*p == '>')
         {
             len = p - name_begin;
-            if (has_no_end_tag) 
+            if (has_no_end_tag)
             {
                 // <XX/> p 指向> 所以要减1
                 len = len - 1;
-            }    
+            }
             if (len > NAME_MAX_SIZE)
             {
                 print("The length of node's name is too long:len = %d\n", len);
@@ -300,7 +302,7 @@ int parse_starttag(XmlParser *parser)
                 memcpy(parser->tagName, tag_name, len);
                 parser->tagName[len] = 0;
                 parser->eventType = START_TAG;
-                set_text(parser, tag_name, len);
+                set_text(parser, name_begin - 1, p - name_begin + 2);
 
                 // 修改工作指针
                 parser->workp = ++p;
@@ -372,7 +374,7 @@ int parse_endtag(XmlParser *parser)
             memcpy(parser->tagName, tag_name, len);
             parser->tagName[len] = 0;
             parser->eventType = END_TAG;
-            set_text(parser, begin, p - begin);
+            set_text(parser, begin - 2, p - begin + 3);
             parser->workp = ++p;
             return END_TAG;
         }
@@ -412,17 +414,18 @@ int parse_text(XmlParser *parser)
         }
         p++;
     }
-    
+
     return check_end(parser);
 }
 
-int parse_attribute(XmlParser *parser)
+int parse_attribute(XmlParser *parser, char *p_text_start)
 {
     char *p = parser->workp;
     char name[NAME_MAX_SIZE] = {0}, value[NAME_MAX_SIZE] = {0};
     char *name_begin = p, *name_end = NULL, *tmp;
     char *value_begin;
-    bool has_no_end_tag = false;
+    int name_len = 0, value_len = 0;
+    char next_char;
 
     while (*p != 0)
     {
@@ -434,7 +437,16 @@ int parse_attribute(XmlParser *parser)
             {
                 name_end = p;
             }
-            memcpy(name, name_begin, name_end - name_begin);
+            name_len = name_end - name_begin;
+            if (name_len >= NAME_MAX_SIZE)
+            {
+                print("name %20s... is too long\n", name_begin);
+                return terminate(parser, p);
+            }
+            memcpy(name, name_begin, name_len);
+            name[name_len] = 0;
+            print("attr name = %s\n", name);
+            // 寻找value
             p = skip_space(p + 1);
             // value 值开始
             if (*p == '\"')
@@ -446,58 +458,74 @@ int parse_attribute(XmlParser *parser)
                         // 第2个" 找到value值
                     else if (*p == '\"')
                     {
+                        value_len = p - value_begin;
+                        // TODO
+                        memcpy(value, value_begin, value_len);
+                        value[value_len] = 0;
+                        print("attr value = %s\n", value);
+                        // 判断当前name是否有重复 并将name value
+                        // 加入到属性链表中
+                        if (!add_attr_value_list(parser, name, value))
+                        {
+                            print("name:%s is repeat!\n", name);
+                            return terminate(parser, name_begin);
+                        }
+                        p++;
+NEXT_CHAR:
                         // value 之后的字符 如果是空格 可能还有属性
-                        char next_char = *(p + 1);
+                        next_char = *p;
                         if (next_char == ' ')
                         {
-                            memcpy(value, value_begin, p - value_begin);
-                            // 判断当前name是否有重复 并将name value
-                            // 加入到属性链表中
-                            add_attr_value_list(parser, name, value);
-
-                            p = skip_space(p + 2);
+                            p = skip_space(p + 1);
                             if (isValidAttrStartChar(*p))
                             {
                                 parser->workp = p;
-                                return parse_attribute(parser);
+                                return parse_attribute(parser, p_text_start);
+                            }
+                            else
+                            {
+                                goto NEXT_CHAR;
                             }
                         }
                         else if (next_char == '>')
                         {
+                            set_text(parser, p_text_start, p - p_text_start + 1);
                             // start tag 结束
-                            parser->workp = p + 2;
-                            // 没有单独的结束标签
-                            // 只有有单独的闭合标签才需要入栈
-                            if (has_no_end_tag == false)
-                            {
-                                // tagName入栈 在解析到end tag时 跟栈顶的name比较
-                                // 如果一致 node的开闭是正确的
-                                Data data;
-                                memset(&data, 0, sizeof (Data));
-                                memcpy(data.string, parser->tagName, strlen(parser->tagName));
-                                push(parser->names_stack, &data);
-                            }
+                            parser->workp = p + 1;
+                            // tagName入栈 在解析到end tag时 跟栈顶的name比较
+                            // 如果一致 node的开闭是正确的
+                            Data data;
+                            memset(&data, 0, sizeof (Data));
+                            memcpy(data.string, parser->tagName, strlen(parser->tagName));
+                            push(parser->names_stack, &data);
                             return START_TAG;
                         }
                         else if (next_char == '/')
                         {
-                            p = p + 2;
                             // 不是 "/>" 解析终止 
-                            if (*p != '>') break;
-                            else has_no_end_tag = true;
+                            if (*++p != '>') break;
+                            else
+                            {
+                                set_text(parser, p_text_start, p - p_text_start + 1);
+                                parser->workp = p + 1;
+                                return START_TAG;
+                            }
                         }
                         else
                         {
-                            break;
+                            return terminate(parser, p);
                         }
                     }
                     else
                     {
-                        break;
+                        return terminate(parser, p);
                     }
                 }
             }
-            break;
+            else
+            {
+                return terminate(parser, p);
+            }
         }
         else if (*p == ' ')
         {
@@ -511,6 +539,7 @@ int parse_attribute(XmlParser *parser)
                 name_end = tmp;
             }
         }
+        else break;
     }
 
     return terminate(parser, p);
@@ -581,26 +610,29 @@ void set_next_text(XmlParser *parser, char *begin, int size)
     parser->nextText[size] = 0;
 }
 
-bool is_name_repeated(Pair*, char*);
-
-void add_attr_value_list(XmlParser *parser, char *name, char *value)
+bool add_attr_value_list(XmlParser *parser, char *name, char *value)
 {
-    Pair *first = parser->head_pair.next;
-    Pair *pair = first;
-    Pair *new_pair = NULL;
-
-    if (!is_name_repeated(first, name))
+    Pair *pre = &parser->head_pair;
+    Pair *pair = pre->next;
+    
+    while (pair)
     {
-        // 没重复name 添加到链表
-        new_pair = (Pair *) xml_malloc(sizeof (Pair));
-        memset(new_pair, 0, sizeof (Pair));
-        strcpy(new_pair->name, name);
-        strcpy(new_pair->value, value);
-
-        while (pair->next) pair = pair->next->next;
-        // 找到最后一个节点
-        pair->next = new_pair;
+        if (!strcmp(name, pair->name)) return false;
+        pre = pair;
+        pair = pair->next;
     }
+    
+    // 没重复name 添加到链表
+    Pair *new_pair = (Pair *) xml_malloc(sizeof (Pair));
+    memset(new_pair, 0, sizeof (Pair));
+    strcpy(new_pair->name, name);
+    strcpy(new_pair->value, value);
+    new_pair->next = NULL;
+
+    // 将新节点加入到链尾
+    pre->next = new_pair;
+
+    return true;
 }
 
 bool is_name_repeated(Pair *first, char *name)

@@ -23,13 +23,13 @@ int main(int argc, char** argv)
     char *sample_xml =
             "<?xml version=\"1.0\"?>\n"
             "\n"
-            //"<poem xmlns=\"http://www.megginson.com/ns/exp/poetry\">\n"
-            "<title>Roses are Red</title>\n"
-            "<ll/>"    
-            "<l>Roses are red,</l>\n";
+            "<poem a= \"1\" a= \"2\"/>"
+            "<title>Roses are Red</title>\n";
+            //"<ll/>"    
+            //"<l>Roses are red,</l>\n"
     //"<l>Violets are blue;</l>\n"
     //"<l>Sugar is sweet,</l>\n"
-    //"<l>And I love you.</l>\n"
+    //"<l>And I love you.</l>\n";
     //"</poem>";
     
     XmlParser *xml_parser = newXmlParser(sample_xml);
