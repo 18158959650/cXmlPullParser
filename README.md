@@ -1,5 +1,8 @@
 # cXmlPullParser
-XmlPullParser C版本
+
+模仿Java版XmlPullParser的C实现。
+不用在内存中构建树形结构，从而较小内存的占用，
+适用于嵌入式和移动设备平台。
 
 # usage
 
