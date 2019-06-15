@@ -1,9 +1,9 @@
 # cXmlPullParser
 XmlPullParser C版本
 
-#usage
+# usage
 
-```
+```c
 #include <stdio.h>
 #include <stdlib.h>
 #include "xmlpullparser.h"
