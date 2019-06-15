@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2019 Zhang Lei
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ */
+
 #include "xmlpullparser.h"
 
 // 以下函数为内部使用函数,考虑到可能在一些嵌入式
@@ -13,6 +27,7 @@ int parse_text(XmlParser *parser);
 int parse_attribute(XmlParser *parser, char *p_text_start);
 bool add_attr_value_list(XmlParser *parser, char *name, char *value);
 int check_end(XmlParser *parser);
+void clear_attr(XmlParser *xml_parser);
 
 XmlParser *newXmlParser(char *read_buffer)
 {
@@ -46,11 +61,18 @@ int getXmlEventType(XmlParser *parser)
  */
 char *nextText(XmlParser *parser)
 {
-    char *next_text = NULL;
-    int eventType = getNext(parser);
-    if (eventType == TEXT)
+    char *next_text = (char *) NULL;
+    char *p = parser->workp;
+    p = skip_white_space(p);
+
+    int eventType;
+    if (*p != 0 && *p != '<')
     {
-        next_text = parser->nextText;
+        eventType = parse_text(parser);
+        if (eventType == TEXT)
+        {
+            next_text = parser->nextText;
+        }
     }
     return next_text;
 }
@@ -76,6 +98,8 @@ int getStartEventType(XmlParser *parser)
 
 int getNext(XmlParser *parser)
 {
+    clear_attr(parser);
+
     int eventType = parser->eventType;
     char *p = parser->workp;
 
@@ -142,12 +166,10 @@ int parse_declaration(XmlParser *parser)
     char *p = parser->workp;
     if (p != parser->string)
     {
-        println("声明开头不能有空白符!");
+        print("cannot start a declaration with a blank space!\n");
         return terminate(parser, p);
     }
-
     begin = p;
-
     // 跳过<?
     p = p + 2;
     bool isVaildVersion = false;
@@ -315,7 +337,7 @@ int parse_starttag(XmlParser *parser)
                     // 如果一直node 的开闭是正确的
                     Data data;
                     memset(&data, 0, sizeof (Data));
-                    strcpy(data.string, tag_name);
+                    memcpy(data.string, tag_name, len);
                     push(parser->names_stack, &data);
                 }
 
@@ -380,8 +402,15 @@ int parse_endtag(XmlParser *parser)
         }
         else
         {
-            print("error:endtag[%s] is not equal starttag[%s]\n",
-                  tag_name, data.string);
+            if (parser->names_stack->size > 0)
+            {
+                print("error:endtag[%s] is not equal starttag[%s]\n",
+                      tag_name, data.string);
+            }
+            else
+            {
+                print("error:endtag[%s] has no starttag\n", tag_name);
+            }
             return terminate(parser, begin);
         }
     }
@@ -440,12 +469,12 @@ int parse_attribute(XmlParser *parser, char *p_text_start)
             name_len = name_end - name_begin;
             if (name_len >= NAME_MAX_SIZE)
             {
-                print("name %20s... is too long\n", name_begin);
-                return terminate(parser, p);
+                print("attr name %20s... is too long\n", name_begin);
+                return terminate(parser, name_begin);
             }
             memcpy(name, name_begin, name_len);
             name[name_len] = 0;
-            print("attr name = %s\n", name);
+
             // 寻找value
             p = skip_space(p + 1);
             // value 值开始
@@ -459,10 +488,13 @@ int parse_attribute(XmlParser *parser, char *p_text_start)
                     else if (*p == '\"')
                     {
                         value_len = p - value_begin;
-                        // TODO
+                        if (value_len >= NAME_MAX_SIZE)
+                        {
+                            print("attr value %20s... is too long\n", value_begin);
+                            return terminate(parser, value_begin);
+                        }
                         memcpy(value, value_begin, value_len);
                         value[value_len] = 0;
-                        print("attr value = %s\n", value);
                         // 判断当前name是否有重复 并将name value
                         // 加入到属性链表中
                         if (!add_attr_value_list(parser, name, value))
@@ -557,20 +589,11 @@ char *getText(XmlParser *parser)
 
 void xmlFree(XmlParser *parser)
 {
-
     // 释放属性链表
-    Pair *pair = parser->head_pair.next;
-    Pair *next;
-    while (pair)
-    {
-        next = pair->next;
-        xml_free(pair);
-        pair = next;
-    }
-    parser->head_pair.next = NULL;
-
+    clear_attr(parser);
     xml_free(parser->names_stack);
     xml_free(parser->text);
+    xml_free(parser->nextText);
     xml_free(parser);
 }
 
@@ -614,14 +637,14 @@ bool add_attr_value_list(XmlParser *parser, char *name, char *value)
 {
     Pair *pre = &parser->head_pair;
     Pair *pair = pre->next;
-    
+
     while (pair)
     {
         if (!strcmp(name, pair->name)) return false;
         pre = pair;
         pair = pair->next;
     }
-    
+
     // 没重复name 添加到链表
     Pair *new_pair = (Pair *) xml_malloc(sizeof (Pair));
     memset(new_pair, 0, sizeof (Pair));
@@ -633,18 +656,6 @@ bool add_attr_value_list(XmlParser *parser, char *name, char *value)
     pre->next = new_pair;
 
     return true;
-}
-
-bool is_name_repeated(Pair *first, char *name)
-{
-    Pair *pair = first;
-    while (pair)
-    {
-        if (!strcmp(name, pair->name)) return true;
-        pair = pair->next;
-    }
-
-    return false;
 }
 
 bool is_entity_ref(char *string)
@@ -682,4 +693,19 @@ int check_end(XmlParser *parser)
         print("has no end node: %s\n", data.string);
     }
     return END_DOCUMENT;
+}
+
+void clear_attr(XmlParser *xml_parser)
+{
+    Pair *pair = xml_parser->head_pair.next;
+    Pair *next;
+    while (pair)
+    {
+        next = pair->next;
+        memset(pair, 0, sizeof (Pair));
+        xml_free(pair);
+        pair = next;
+    }
+
+    memset(&xml_parser->head_pair, 0, sizeof (Pair));
 }
