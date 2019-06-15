@@ -1,9 +1,17 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ * Copyright (c) 2019 Zhang Lei
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  */
-
+ 
 /* 
  * File:   main.c
  * Author: zhanglei
@@ -23,18 +31,19 @@ int main(int argc, char** argv)
     char *sample_xml =
             "<?xml version=\"1.0\"?>\n"
             "\n"
-            "<poem a= \"1\" a= \"2\"/>"
-            "<title>Roses are Red</title>\n";
-            //"<ll/>"    
-            //"<l>Roses are red,</l>\n"
+            "<poem a= \"1\" b= \"2\" >"
+            "<title>Roses are Red</title>\n"
+    //"<ll/>"    
+    "<l>Roses are red,</l>\n"
+    "</poem>";
     //"<l>Violets are blue;</l>\n"
     //"<l>Sugar is sweet,</l>\n"
     //"<l>And I love you.</l>\n";
     //"</poem>";
-    
+
     XmlParser *xml_parser = newXmlParser(sample_xml);
     int eventType = getStartEventType(xml_parser);
-    
+
     while (eventType != END_DOCUMENT)
     {
         switch (eventType)
@@ -60,9 +69,9 @@ int main(int argc, char** argv)
 
         eventType = getNext(xml_parser);
     }
-    
+
     xmlFree(xml_parser);
-    
+
     return (EXIT_SUCCESS);
 }
 
@@ -70,6 +79,13 @@ void processStartElement(XmlParser *xml_parser)
 {
     printf("start tag: %s\n", xml_parser->tagName);
     printf("text: %s\n", xml_parser->text);
+    // 获取所有属性
+    Pair *pair = xml_parser->head_pair.next;
+    while (pair)
+    {
+        printf("attr name = %s, value = %s\n", pair->name, pair->value);
+        pair = pair->next;
+    }
 
     char *next_text = nextText(xml_parser);
     if (next_text != NULL)

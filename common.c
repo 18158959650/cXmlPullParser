@@ -9,9 +9,10 @@
 #include "common.h"
 
 // 不用的应用平台修改对应的函数指针
+// 记录日志
 int (*print) (const char*, ...) = printf;
 void *(*xml_malloc)(size_t sz) = malloc;
-void *(*xml_realloc)(void *__ptr, size_t __size) = realloc;
+//void *(*xml_realloc)(void *__ptr, size_t __size) = realloc;
 void (*xml_free)(void *ptr) = free;
 
 void println(const char *fmt, ...)
