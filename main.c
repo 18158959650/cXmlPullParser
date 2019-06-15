@@ -11,7 +11,7 @@
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
  */
- 
+
 /* 
  * File:   main.c
  * Author: zhanglei
@@ -23,19 +23,18 @@
 #include <stdlib.h>
 #include "xmlpullparser.h"
 
-void processStartElement(XmlParser *xpp);
-void processEndElement(XmlParser *xpp);
+void processNode(XmlParser *xpp, char *node_type);
 
 int main(int argc, char** argv)
 {
     char *sample_xml =
             "<?xml version=\"1.0\"?>\n"
             "\n"
-            "<poem a= \"1\" b= \"2\" >"
+            "<poem a= \"1\" b= \"2\" c=\"123\" >"
             "<title>Roses are Red</title>\n"
-    //"<ll/>"    
-    "<l>Roses are red,</l>\n"
-    "</poem>";
+            //"<ll/>"    
+            "<l>Roses are red,</l>\n"
+            "</poem>";
     //"<l>Violets are blue;</l>\n"
     //"<l>Sugar is sweet,</l>\n"
     //"<l>And I love you.</l>\n";
@@ -52,10 +51,10 @@ int main(int argc, char** argv)
             printf("current eventType:START_DOCUMENT\n");
             break;
         case START_TAG:
-            processStartElement(xml_parser);
+            processNode(xml_parser, "start");
             break;
         case END_TAG:
-            processEndElement(xml_parser);
+            processNode(xml_parser, "end");
             break;
         case END_DOCUMENT:
             printf("current eventType:END_DOCUMENT\n");
@@ -75,9 +74,9 @@ int main(int argc, char** argv)
     return (EXIT_SUCCESS);
 }
 
-void processStartElement(XmlParser *xml_parser)
+void processNode(XmlParser *xml_parser, char *node_type)
 {
-    printf("start tag: %s\n", xml_parser->tagName);
+    printf("%s tag: %s\n", node_type, xml_parser->tagName);
     printf("text: %s\n", xml_parser->text);
     // 获取所有属性
     Pair *pair = xml_parser->head_pair.next;
@@ -93,10 +92,4 @@ void processStartElement(XmlParser *xml_parser)
         printf("nextText: %s\n", next_text);
     }
     printf("\n");
-}
-
-void processEndElement(XmlParser *xpp)
-{
-    printf("end tag:%s\n", xpp->tagName);
-    printf("text:%s\n\n", xpp->text);
 }

@@ -28,6 +28,7 @@ int parse_attribute(XmlParser *parser, char *p_text_start);
 bool add_attr_value_list(XmlParser *parser, char *name, char *value);
 int check_end(XmlParser *parser);
 void clear_attr(XmlParser *xml_parser);
+void set_next_event_type(XmlParser *xml_parser, int event_type);
 
 XmlParser *newXmlParser(char *read_buffer)
 {
@@ -40,6 +41,7 @@ XmlParser *newXmlParser(char *read_buffer)
     {
         memset(parser, 0, sizeof (XmlParser));
         parser->eventType = END_DOCUMENT;
+        parser->next_eventType = NONE;
         parser->string = read_buffer;
         parser->workp = read_buffer;
         parser->text = xml_malloc(DEFAULT_TEXT_SIZE);
@@ -98,6 +100,27 @@ int getStartEventType(XmlParser *parser)
 
 int getNext(XmlParser *parser)
 {
+    // 前一个事件指定的下一个事件
+    int next_event_type = parser->next_eventType;
+    if (next_event_type != NONE)
+    {
+        if (next_event_type == END_TAG)
+        {
+            if (parser->names_stack->size == 0)
+            {
+                set_next_event_type(parser, END_DOCUMENT);
+                return END_TAG;
+            }
+        }
+        else
+        {
+            clear_attr(parser);
+        }
+        // 不用指定下一个事件
+        parser->next_eventType = NONE;
+        return next_event_type;
+    }
+
     clear_attr(parser);
 
     int eventType = parser->eventType;
@@ -340,6 +363,10 @@ int parse_starttag(XmlParser *parser)
                     memcpy(data.string, tag_name, len);
                     push(parser->names_stack, &data);
                 }
+                else
+                {
+                    set_next_event_type(parser, END_TAG);
+                }
 
                 return START_TAG;
             }
@@ -398,6 +425,11 @@ int parse_endtag(XmlParser *parser)
             parser->eventType = END_TAG;
             set_text(parser, begin - 2, p - begin + 3);
             parser->workp = ++p;
+            // 根节点终止
+            if (parser->names_stack->size == 0)
+            {
+                set_next_event_type(parser, END_DOCUMENT);
+            }
             return END_TAG;
         }
         else
@@ -540,6 +572,7 @@ NEXT_CHAR:
                             {
                                 set_text(parser, p_text_start, p - p_text_start + 1);
                                 parser->workp = p + 1;
+                                set_next_event_type(parser, END_TAG);
                                 return START_TAG;
                             }
                         }
@@ -708,4 +741,9 @@ void clear_attr(XmlParser *xml_parser)
     }
 
     memset(&xml_parser->head_pair, 0, sizeof (Pair));
+}
+
+void set_next_event_type(XmlParser *xml_parser, int event_type)
+{
+    xml_parser->next_eventType = event_type;
 }

@@ -19,6 +19,7 @@ extern "C" {
 #endif
 
     enum _event_type {
+        NONE,
         START_DOCUMENT,
         END_DOCUMENT,
         START_TAG,
@@ -43,6 +44,7 @@ extern "C" {
     
     typedef struct {
         int eventType;
+        int next_eventType;
         // 节点名称栈 
         Stack *names_stack;
         char tagName[NAME_MAX_SIZE];
