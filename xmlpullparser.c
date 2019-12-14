@@ -29,8 +29,9 @@ bool add_attr_value_list(XmlParser *parser, char *name, char *value);
 int check_end(XmlParser *parser);
 void clear_attr(XmlParser *xml_parser);
 void set_next_event_type(XmlParser *xml_parser, int event_type);
+bool add_attr_to_list(Pair *head, char *name, char *value);
 
-XmlParser *newXmlParser(char *read_buffer)
+XmlParser *xml_parser_new(char *read_buffer)
 {
     XmlParser *parser = xml_malloc(sizeof (XmlParser));
     if (parser == NULL)
@@ -46,7 +47,7 @@ XmlParser *newXmlParser(char *read_buffer)
         parser->workp = read_buffer;
         parser->text = xml_malloc(DEFAULT_TEXT_SIZE);
         parser->nextText = xml_malloc(DEFAULT_TEXT_SIZE);
-        parser->names_stack = newStack();
+        parser->names_stack = stack_new();
     }
 
     return parser;
@@ -156,7 +157,7 @@ int getNext(XmlParser *parser)
             }
             else if (!strcmp_part(p + 1, "[CDATA["))
             {
-                p += strlen("[CDATA[");
+                p += strlen("[CDATA[") + 1;
                 parser->workp = p;
                 return parse_cdata(parser);
             }
@@ -276,12 +277,12 @@ int parse_cdata(XmlParser *parser)
     char *p = parser->workp;
     char *begin = p;
 
-    while (*p != 0)
+    while (*p != 0 && *p != '<')
     {
         if (!strcmp_part(p, "]]>"))
         {
             // 设置text值    
-            set_text(parser, begin, p - begin + 1);
+            set_text(parser, begin, p - begin);
             parser->eventType = CDSECT;
             parser->workp = p + 3;
             return CDSECT;
@@ -361,7 +362,7 @@ int parse_starttag(XmlParser *parser)
                     Data data;
                     memset(&data, 0, sizeof (Data));
                     memcpy(data.string, tag_name, len);
-                    push(parser->names_stack, &data);
+                    stack_push(parser->names_stack, &data);
                 }
                 else
                 {
@@ -416,7 +417,7 @@ int parse_endtag(XmlParser *parser)
     if (has_get_tag_name)
     {
         // 获取开始节点name
-        Data data = pop(parser->names_stack);
+        Data data = stack_pop(parser->names_stack);
 
         if (!strcmp(tag_name, data.string))
         {
@@ -482,7 +483,7 @@ int parse_text(XmlParser *parser)
 int parse_attribute(XmlParser *parser, char *p_text_start)
 {
     char *p = parser->workp;
-    char name[NAME_MAX_SIZE] = {0}, value[NAME_MAX_SIZE] = {0};
+    char name[NAME_MAX_SIZE + 1] = {0}, value[NAME_MAX_SIZE + 1] = {0};
     char *name_begin = p, *name_end = NULL, *tmp;
     char *value_begin;
     int name_len = 0, value_len = 0;
@@ -561,7 +562,7 @@ NEXT_CHAR:
                             Data data;
                             memset(&data, 0, sizeof (Data));
                             memcpy(data.string, parser->tagName, strlen(parser->tagName));
-                            push(parser->names_stack, &data);
+                            stack_push(parser->names_stack, &data);
                             return START_TAG;
                         }
                         else if (next_char == '/')
@@ -620,7 +621,7 @@ char *getText(XmlParser *parser)
     return parser->text;
 }
 
-void xmlFree(XmlParser *parser)
+void xml_parser_free(XmlParser *parser)
 {
     // 释放属性链表
     clear_attr(parser);
@@ -668,12 +669,21 @@ void set_next_text(XmlParser *parser, char *begin, int size)
 
 bool add_attr_value_list(XmlParser *parser, char *name, char *value)
 {
-    Pair *pre = &parser->head_pair;
+    return add_attr_to_list(&parser->head_pair, name, value);
+}
+
+bool add_attr_to_list(Pair *head, char *name, char *value)
+{
+    Pair *pre = head;
     Pair *pair = pre->next;
 
     while (pair)
     {
-        if (!strcmp(name, pair->name)) return false;
+        if (!strcmp(name, pair->name))
+        {
+            print("attr name[%s] repeat!", name);
+            return false;
+        }
         pre = pair;
         pair = pair->next;
     }
@@ -722,7 +732,7 @@ int check_end(XmlParser *parser)
     else
     {
         // 取栈顶数据
-        Data data = pop(parser->names_stack);
+        Data data = stack_pop(parser->names_stack);
         print("has no end node: %s\n", data.string);
     }
     return END_DOCUMENT;
@@ -746,4 +756,193 @@ void clear_attr(XmlParser *xml_parser)
 void set_next_event_type(XmlParser *xml_parser, int event_type)
 {
     xml_parser->next_eventType = event_type;
+}
+
+/**
+ * xml 打包处理
+ * @param size
+ * @return 
+ */
+bool xml_print_format = true;
+
+int get_node_text(XmlNode *node, char *text);
+
+int *xml_node_print(XmlNode *node, char *buffer)
+{
+    char node_text[NODE_TEXT_MAX_SIZE + 1] = {0};
+    
+    int len = get_node_text(node, node_text);
+    // very important! free node attr linkedlist memory
+    clear_node_attr(node);
+    if (len > NODE_TEXT_MAX_SIZE)
+    {
+        print("node text size too large! %d\n", len);
+        return -1;
+    }
+    memcpy(buffer, node_text, len);
+    return 0;
+}
+
+void xml_set_print_format(bool fmt)
+{
+    xml_print_format = fmt;
+}
+
+void clear_node_attr(XmlNode *xml_node);
+
+int xml_add_node_to_parent(XmlNode *child, XmlNode *parent)
+{
+    child->depth = parent->depth + 1;
+    char node_text[NODE_TEXT_MAX_SIZE + 1] = {0};
+
+    int len = get_node_text(child, node_text);
+    // very important! free node attr linkedlist memory
+    clear_node_attr(child);
+    if (len > NODE_TEXT_MAX_SIZE)
+    {
+        print("node text size too large! %d\n", len);
+        return -1;
+    }
+    memcpy(parent->text + parent->text_len, node_text, len);
+    parent->text_len += len;
+    return 0;
+}
+
+int xml_add_noattr_element(XmlNode *parent_node, char *name, char *text)
+{
+    XmlNode xmlNode;
+    xmlNode.text = text;
+    xmlNode.head_pair.next = NULL;
+    xmlNode.has_child = false;
+
+    memset(xmlNode.tagName, 0, sizeof (xmlNode.tagName));
+    strcpy(xmlNode.tagName, name);
+
+    return xml_add_node_to_parent(&xmlNode, parent_node);
+}
+
+bool xml_node_add_attr(XmlNode *node, char *attr_name, char *attr_value)
+{
+    return add_attr_to_list(&node->head_pair, attr_name, attr_value);
+}
+
+int get_node_text(XmlNode *node, char *text)
+{
+    Pair *pair = node->head_pair.next;
+    char temp[NAME_MAX_SIZE + DEFAULT_TEXT_SIZE + 4 + 1];
+    int len = 0, text_len = 0;
+    
+    if (xml_print_format)
+    {
+        if (node->depth > 1) text[text_len++] = '\n';
+        int i = 0;
+        for (; i < node->depth - 1; i++)
+        {
+            text[text_len + i] = '\t';
+        }
+        text_len = text_len + node->depth - 1;
+    }
+
+    // add start tag
+    char tagName[NAME_MAX_SIZE + 10] = {0};
+    len = sprintf(tagName, "<%s", node->tagName);
+    memcpy(text + text_len, tagName, len);
+    text_len += len;
+
+    // add all attributes
+    while (pair)
+    {
+        len = sprintf(temp, " %s=\"%s\"", pair->name, pair->value);
+        memcpy(text + text_len, temp, len);
+        text_len += len;
+        pair = pair->next;
+    }
+
+    // has no child node
+    if (!node->has_child && node->text == NULL)
+    {
+        // add /
+        text[text_len++] = '/';
+    }
+    // add >
+    text[text_len++] = '>';
+
+    if (node->text != NULL)
+    {
+        strcpy(text + text_len, node->text);
+        text_len += strlen(node->text);
+    }
+    
+    if (node->has_child && xml_print_format)
+    {
+        text[text_len++] = '\n';
+        int i = 0;
+        for (; i < node->depth - 1; i++)
+        {
+            text[text_len + i] = '\t';
+        }
+        text_len = text_len + node->depth - 1;
+    }
+
+    memset(tagName, 0, sizeof (tagName));
+    len = sprintf(tagName, "</%s>", node->tagName);
+    memcpy(text + text_len, tagName, len);
+    text_len += len;
+
+    return text_len;
+}
+
+XmlNode xml_element_create(char *name, char *text)
+{
+    XmlNode node;
+    node.has_child = false;
+    node.head_pair.next = NULL;
+    node.text = text;
+
+    int len = strlen(name);
+    len = len > NAME_MAX_SIZE ? NAME_MAX_SIZE : len;
+
+    strncpy(node.tagName, name, len);
+    node.tagName[len] = 0;
+
+    return node;
+}
+
+XmlNode xml_node_create(char *name, int size, int depth)
+{
+    XmlNode node;
+    node.has_child = true;
+    node.head_pair.next = NULL;
+    node.text = xml_malloc(size);
+    memset(node.text, 0, size);
+    node.text_len = 0;
+    node.depth = depth;
+
+    int len = strlen(name);
+    len = len > NAME_MAX_SIZE ? NAME_MAX_SIZE : len;
+
+    strncpy(node.tagName, name, len);
+    node.tagName[len] = 0;
+
+    return node;
+}
+
+void clear_node_attr(XmlNode *xml_node)
+{
+    Pair *pair = xml_node->head_pair.next;
+    Pair *next;
+    while (pair)
+    {
+        next = pair->next;
+        memset(pair, 0, sizeof (Pair));
+        xml_free(pair);
+        pair = next;
+    }
+
+    memset(&xml_node->head_pair, 0, sizeof (Pair));
+}
+
+void xml_node_free(XmlNode node)
+{
+    xml_free(node.text);
 }

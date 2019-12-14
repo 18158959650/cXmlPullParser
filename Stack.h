@@ -1,12 +1,6 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-
 /* 
  * File:   Stack.h
- * Author: landi
+ * Author: zhanglei
  *
  * Created on 2019年5月21日, 下午9:54
  */
@@ -17,7 +11,7 @@
 #include "common.h"
 
 // 栈空间默认大小
-#define DEFAUT_SIZE 10
+#define STACK_DEFAUT_SIZE 10
 #define NAME_MAX_SIZE 50
 
 #ifdef __cplusplus
@@ -25,18 +19,18 @@ extern "C" {
 #endif
 
     typedef struct {
-        char string[NAME_MAX_SIZE];
+        char string[NAME_MAX_SIZE + 1];
     } Data;
 
     typedef struct {
-        Data data[DEFAUT_SIZE];
+        Data data[STACK_DEFAUT_SIZE];
         int size;
     } Stack;
 
-    Stack *newStack(void);
-    Data pop(Stack *stack);
-    void push(Stack *stack, Data *data);
-    bool isStackEmpty(Stack *stack);
+    Stack *stack_new(void);
+    Data stack_pop(Stack *stack);
+    void stack_push(Stack *stack, Data *data);
+    bool stack_is_empty(Stack *stack);
 
 #ifdef __cplusplus
 }

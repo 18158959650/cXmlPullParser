@@ -1,6 +1,6 @@
 #include "Stack.h"
 
-Stack *newStack(void)
+Stack *stack_new(void)
 {
     Stack *stack = xml_malloc(sizeof (Stack));
     stack->size = 0;
@@ -8,17 +8,17 @@ Stack *newStack(void)
 
     if (stack == NULL)
     {
-        println("newStack fail!");
+        print("newStack fail!\n");
     }
 
     return stack;
 }
 
-Data pop(Stack *stack)
+Data stack_pop(Stack *stack)
 {
     Data data;
     memset(&data, 0, sizeof (Data));
-    if (!isStackEmpty(stack))
+    if (!stack_is_empty(stack))
     {
         data = stack->data[stack->size - 1];
         stack->size--;
@@ -26,19 +26,19 @@ Data pop(Stack *stack)
     return data;
 }
 
-void push(Stack *stack, Data *data)
+void stack_push(Stack *stack, Data *data)
 {
     int size = stack->size + 1;
-    if (size > DEFAUT_SIZE)
+    if (size > STACK_DEFAUT_SIZE)
     {
-        println("stack size too large!");
+        print("stack size too large!\n");
         return;
     }
 
     stack->data[stack->size++] = *data;
 }
 
-bool isStackEmpty(Stack *stack)
+bool stack_is_empty(Stack *stack)
 {
     return stack->size == 0;
 }
